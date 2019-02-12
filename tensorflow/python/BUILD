@@ -143,7 +143,6 @@ py_library(
         ":map_fn",
         ":math_ops",
         ":metrics",
-        ":mode_keys",
         ":nccl_ops",
         ":nn",
         ":ops",
@@ -174,6 +173,7 @@ py_library(
         "//tensorflow/lite/python:lite",
         "//tensorflow/python/compat",
         "//tensorflow/python/compat:v2_compat",
+        "//tensorflow/python/compiler",
         "//tensorflow/python/data",
         "//tensorflow/python/distribute",
         "//tensorflow/python/distribute:estimator_training",
@@ -650,6 +650,7 @@ py_library(
         "//tensorflow/python/eager:context",
         "//tensorflow/python/eager:core",
         "//tensorflow/python/eager:execute",
+        "//tensorflow/tools/docs:doc_controls",
     ],
 )
 
@@ -1194,6 +1195,7 @@ tf_py_test(
     srcs = ["framework/registry_test.py"],
     additional_deps = [
         ":framework_for_generated_wrappers",
+        "@absl_py//absl/testing:parameterized",
         "//tensorflow/python:client_testlib",
     ],
     main = "framework/registry_test.py",
@@ -2264,7 +2266,7 @@ py_library(
         ":function_def_to_graph",
         ":functional_ops_gen",
         ":gradients",
-        ":gradients_impl",
+        ":gradients_util",
         ":graph_to_function_def",
         ":pywrap_tensorflow",
         ":util",
@@ -2277,6 +2279,7 @@ py_library(
     name = "while_v2",
     srcs = [
         "ops/while_v2.py",
+        "ops/while_v2_indexed_slices_rewriter.py",
     ],
     srcs_version = "PY2AND3",
     deps = [
@@ -2289,7 +2292,7 @@ py_library(
         ":framework_ops",
         ":function_def_to_graph",
         ":functional_ops_gen",
-        ":gradients_impl",
+        ":gradients_util",
         ":list_ops",
         ":tensor_array_ops",
         ":tensor_shape",
@@ -2380,6 +2383,7 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":gradients_impl",
+        ":gradients_util",
         ":unconnected_gradients",
         "//tensorflow/python/eager:function",
         "//tensorflow/python/eager:tape",
@@ -2403,7 +2407,6 @@ py_library(
         ":framework",
         ":framework_for_generated_wrappers",
         ":framework_ops",
-        ":functional_ops",
         ":image_grad",
         ":linalg_grad",
         ":linalg_ops",
@@ -2415,15 +2418,34 @@ py_library(
         ":optional_grad",
         ":platform",
         ":random_grad",
-        ":resource_variable_ops",
         ":tensor_array_ops",
+        ":unconnected_gradients",
+        ":util",
+    ],
+)
+
+py_library(
+    name = "gradients_util",
+    srcs = [
+        "ops/gradients_util.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":array_ops",
+        ":control_flow_ops",
+        ":control_flow_util",
+        ":framework",
+        ":framework_for_generated_wrappers",
+        ":framework_ops",
+        ":functional_ops",
+        ":math_ops",
+        ":platform",
+        ":resource_variable_ops",
         ":tensor_util",
         ":unconnected_gradients",
         ":util",
-        ":variable_scope",
         "//tensorflow/core:protos_all_py",
         "//tensorflow/python/eager:context",
-        "//tensorflow/python/eager:tape",
         "//third_party/py/numpy",
         "@six_archive//:six",
     ],
@@ -2712,6 +2734,22 @@ py_library(
         "//tensorflow/core:protos_all_py",
         "//tensorflow/python/eager:context",
         "//tensorflow/python/eager:tape",
+    ],
+)
+
+py_library(
+    name = "critical_section_ops",
+    srcs = ["ops/critical_section_ops.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":array_ops",
+        ":control_flow_ops",
+        ":dtypes",
+        ":framework_ops",
+        ":resource_variable_ops_gen",
+        ":tensor_array_ops",
+        ":util",
+        "//tensorflow/python/eager:context",
     ],
 )
 
@@ -3126,6 +3164,7 @@ py_library(
         ":clip_ops",
         ":confusion_matrix",
         ":control_flow_ops",
+        ":critical_section_ops",
         ":cudnn_rnn_grad",
         ":data_flow_grad",
         ":data_flow_ops",
@@ -3655,6 +3694,7 @@ cuda_py_test(
         "//third_party/py/numpy",
     ],
     tags = ["no_windows_gpu"],
+    xla_enable_strict_auto_jit = True,
 )
 
 py_library(
@@ -4680,6 +4720,7 @@ cuda_py_test(
         ":math_ops",
         "//tensorflow/core:protos_all_py",
     ],
+    xla_enable_strict_auto_jit = False,  # Graph structure is different with autojit
 )
 
 cuda_py_test(
@@ -6035,29 +6076,6 @@ py_binary(
     ],
 )
 
-py_library(
-    name = "mode_keys",
-    srcs = [
-        "training/mode_keys.py",
-    ],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":util",
-    ],
-)
-
-tf_py_test(
-    name = "mode_keys_test",
-    size = "small",
-    srcs = [
-        "training/mode_keys_test.py",
-    ],
-    additional_deps = [
-        ":client_testlib",
-        ":mode_keys",
-    ],
-)
-
 pyx_library(
     name = "framework_fast_tensor_util",
     srcs = ["framework/fast_tensor_util.pyx"],
@@ -6069,4 +6087,12 @@ py_library(
     name = "tf2",
     srcs = ["tf2.py"],
     srcs_version = "PY2AND3",
+)
+
+cuda_py_test(
+    name = "raw_ops_test",
+    srcs = ["ops/raw_ops_test.py"],
+    additional_deps = [
+        "//tensorflow/python:client_testlib",
+    ],
 )

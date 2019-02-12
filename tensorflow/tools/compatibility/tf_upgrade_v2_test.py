@@ -409,7 +409,8 @@ bazel-bin/tensorflow/tools/compatibility/update/generate_v2_reorders_map
 
       text = "%s(a, b)\n" % decay
       _, report, unused_errors, _ = self._upgrade(text)
-      self.assertIn("%s has been changed to return a callable" % decay, report)
+      self.assertIn("switch to the schedules in "
+                    "`tf.keras.optimizers.schedules`", report)
 
   def testMetrics(self):
     metrics = [
@@ -993,19 +994,6 @@ tf.print('abc')
     _, unused_report, unused_errors, new_text = self._upgrade(text)
     self.assertEqual(new_text, expected_text)
 
-  def testBatchGather(self):
-    text = "tf.batch_gather(foo, bar)"
-    expected_text1 = "tf.gather(params=foo, indices=bar, batch_dims=-1)"
-    expected_text2 = "tf.gather(batch_dims=-1, params=foo, indices=bar)"
-    _, unused_report, unused_errors, new_text = self._upgrade(text)
-    self.assertIn(new_text, [expected_text1, expected_text2])
-
-    text = "tf.batch_gather(params=foo, indices=bar)"
-    expected_text1 = "tf.gather(params=foo, indices=bar, batch_dims=-1)"
-    expected_text2 = "tf.gather(batch_dims=-1, params=foo, indices=bar)"
-    _, unused_report, unused_errors, new_text = self._upgrade(text)
-    self.assertIn(new_text, [expected_text1, expected_text2])
-
   def testIterators(self):
     for (text, expected) in [
         ("(expr + yielding(data)).make_one_shot_iterator()",
@@ -1048,6 +1036,13 @@ tf.print('abc')
          "tf.compat.v1.data.make_initializable_iterator(dataset, x, y, z)")]:
       _, unused_report, unused_errors, actual = self._upgrade(text)
       self.assertEqual(actual, expected)
+
+  def testMapAndBatch(self):
+    suffix = ".data.experimental.map_and_batch_with_legacy_function(args)"
+    text = "tf" + suffix
+    expected = "tf.compat.v1" + suffix
+    _, unused_report, unused_errors, actual = self._upgrade(text)
+    self.assertEqual(actual, expected)
 
   def testCast(self):
     for (name, dtype) in [("int32", "int32"),
@@ -1156,6 +1151,18 @@ def _log_prob(self, x):
     _, _, _, new_text = self._upgrade(text)
     self.assertEqual(expected, new_text)
 
+  def test_is_tensor_upgrade(self):
+    text = "tf.contrib.framework.is_tensor(x)"
+    expected = "tf.is_tensor(x)"
+    _, _, _, new_text = self._upgrade(text)
+    self.assertEqual(expected, new_text)
+
+  def test_CriticalSection_upgrade(self):
+    text = "tf.contrib.framework.CriticalSection(shared_name='blah')"
+    expected = "tf.CriticalSection(shared_name='blah')"
+    _, _, _, new_text = self._upgrade(text)
+    self.assertEqual(expected, new_text)
+
   def test_sample_distorted_bounding_box(self):
     # pylint: disable=line-too-long
     text = "tf.image.sample_distorted_bounding_box(a, b, c, d, e, f, g, h, i, j)"
@@ -1170,6 +1177,20 @@ def _log_prob(self, x):
     # pylint: enable=line-too-long
     _, _, _, new_text = self._upgrade(text)
     self.assertEqual(expected, new_text)
+
+  def test_flags_bare(self):
+    _, _, errors, _ = self._upgrade("tf.flags")
+    self.assertIn("tf.flags has been removed", errors[0])
+
+  def test_flags_flags(self):
+    _, _, errors, _ = self._upgrade("tf.flags.FLAGS")
+    self.assertIn("tf.flags has been removed", errors[0])
+
+  def test_max_pool_2d(self):
+    text = "tf.nn.max_pool(value=4)"
+    expected_text = "tf.nn.max_pool2d(input=4)"
+    _, _, _, new_text = self._upgrade(text)
+    self.assertEqual(expected_text, new_text)
 
 
 class TestUpgradeFiles(test_util.TensorFlowTestCase):

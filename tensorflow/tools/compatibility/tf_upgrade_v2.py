@@ -223,6 +223,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.nn.max_pool_with_argmax": {
             "Targmax": "output_dtype",
         },
+        "tf.nn.max_pool": {
+            "value": "input"
+        },
         "tf.multinomial": {
             "output_dtype": "dtype",
         },
@@ -420,7 +423,7 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.batch_to_space_nd":
             "tf.batch_to_space",
         "tf.batch_gather":
-            "tf.gather",
+            "tf.compat.v1.batch_gather",
         "tf.space_to_batch_nd":
             "tf.space_to_batch",
         "tf.nn.space_to_batch":
@@ -537,6 +540,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.data.experimental.unbatch",
         "tf.contrib.data.unique":
             "tf.data.experimental.unique",
+        "tf.contrib.framework.CriticalSection":
+            "tf.CriticalSection",
+        "tf.contrib.framework.is_tensor":
+            "tf.is_tensor",
         "tf.contrib.framework.nest.assert_same_structure":
             "tf.nest.assert_same_structure",
         "tf.contrib.framework.nest.flatten":
@@ -545,7 +552,7 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.nest.map_structure",
         "tf.contrib.framework.nest.pack_sequence_as":
             "tf.nest.pack_sequence_as",
-        "tf.contrib.framework.constant_value":
+        "tf.contrib.util.constant_value":
             "tf.get_static_value",
         "tf.contrib.saved_model.load_keras_model":
             "tf.keras.experimental.load_from_saved_model",
@@ -697,6 +704,16 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.compat.v1.assert_rank",
         "tf.contrib.framework.argsort":
             "tf.argsort",
+        "tf.nn.max_pool":
+            "tf.nn.max_pool2d",
+        'tf.keras.initializers.zeros':
+            'tf.compat.v1.keras.initializers.zeros',
+        'tf.keras.initializers.ones':
+            'tf.compat.v1.keras.initializers.ones',
+        'tf.keras.initializers.constant':
+            'tf.compat.v1.keras.initializers.constant',
+        "tf.data.experimental.map_and_batch_with_legacy_function":
+            "tf.compat.v1.data.experimental.map_and_batch_with_legacy_function",
     }
     # pylint: enable=line-too-long
 
@@ -723,7 +740,6 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.io.serialize_many_sparse",
         "tf.argmax",
         "tf.argmin",
-        "tf.batch_gather",
         "tf.batch_to_space",
         "tf.cond",
         "tf.nn.space_to_batch",
@@ -810,6 +826,7 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.image.sample_distorted_bounding_box",
         "tf.gradients",
         "tf.hessians",
+        "tf.nn.max_pool",
     }
 
     # Functions that were reordered should be changed to the new keyword args
@@ -825,14 +842,15 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "the required code."
     )
 
+    flags_warning = (
+        ast_edits.ERROR,
+        "tf.flags has been removed, please use the argparse or absl"
+        " modules if you need command line parsing.")
+
     decay_function_comment = (
         ast_edits.INFO,
-        "<function name> has been changed to return a callable instead "
-        "of a tensor when graph building, but its functionality remains "
-        "unchanged during eager execution (returns a callable like "
-        "before). The converter cannot detect and fix this reliably, so "
-        "this usage has been converted to compat.v1 (even though it may already"
-        " be correct).\n"
+        "To use learning rate decay schedules with TensorFlow 2.0, switch to "
+        "the schedules in `tf.keras.optimizers.schedules`.\n"
     )
 
     assert_return_type_comment = (
@@ -978,10 +996,6 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             assert_rank_comment,
         "tf.debugging.assert_rank_in":
             assert_rank_comment,
-        "tf.flags": (
-            ast_edits.ERROR,
-            "tf.flags has been removed, please use the argparse or absl"
-            " modules if you need command line parsing."),
         "tf.train.exponential_decay":
             decay_function_comment,
         "tf.train.piecewise_constant_decay":
@@ -1268,7 +1282,6 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "*.make_initializable_iterator": _iterator_transformer,
         "*.make_one_shot_iterator": _iterator_transformer,
         "tf.nn.dropout": _dropout_transformer,
-        "tf.batch_gather": _batch_gather_transformer,
         "tf.to_bfloat16": _cast_transformer,
         "tf.to_complex128": _cast_transformer,
         "tf.to_complex64": _cast_transformer,
@@ -1327,6 +1340,7 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
 
     self.module_deprecations = {
         "tf.contrib": contrib_warning,
+        "tf.flags": flags_warning,
     }
 
 
@@ -1575,24 +1589,6 @@ def _softmax_cross_entropy_with_logits_transformer(
                    "transformation.\n"))
       _wrap_label(karg, karg.value)
       return node
-  return node
-
-
-def _batch_gather_transformer(parent, node, full_name, name, logs):
-  """Add batch_dims argument for gather calls."""
-  # Check if the call already has a batch_dims argument
-  if any([kw.arg == "batch_dims" for kw in node.keywords]):
-    logs.append((ast_edits.INFO, node.lineno, node.col_offset,
-                 "tf.batch_gather already has batch_dims argument. Neat."))
-    return None
-
-  minus_one = ast.Num(n=-1)
-  minus_one.lineno = 0
-  minus_one.col_offset = 0
-  new_arg = ast.keyword("batch_dims", minus_one)
-  node.keywords.append(new_arg)
-  logs.append((ast_edits.INFO, node.lineno, node.col_offset,
-               "Added keyword argument batch_dims=-1 to tf.batch_gather."))
   return node
 
 
